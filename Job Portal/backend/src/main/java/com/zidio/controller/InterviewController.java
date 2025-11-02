@@ -8,43 +8,60 @@ import com.zidio.service.EmailService;
 import com.zidio.util.SecurityUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/interviews")
 public class InterviewController {
-    private final InterviewRepository interviewRepository;
-    private final UserRepository userRepository;
+
+    private final InterviewRepository interviewRepo;
+    private final UserRepository userRepo;
     private final EmailService emailService;
-    public InterviewController(InterviewRepository interviewRepository, UserRepository userRepository, EmailService emailService) {
-        this.interviewRepository = interviewRepository; this.userRepository = userRepository; this.emailService = emailService;
+
+    public InterviewController(InterviewRepository interviewRepo, UserRepository userRepo, EmailService emailService) {
+        this.interviewRepo = interviewRepo;
+        this.userRepo = userRepo;
+        this.emailService = emailService;
+    }
+
+    @GetMapping
+    public List<Interview> getAll() {
+        return interviewRepo.findAll();
     }
 
     @PostMapping("/schedule")
-    public ResponseEntity<?> schedule(@RequestBody Interview request) {
-        User me = SecurityUtils.getCurrentUser();
-        if (me == null) return ResponseEntity.status(401).body("Unauthorized");
-        if (!"RECRUITER".equalsIgnoreCase(me.getRole()) && !"ADMIN".equalsIgnoreCase(me.getRole()))
-            return ResponseEntity.status(403).body("Forbidden");
-        request.setRecruiterId(me.getId());
-        Interview saved = interviewRepository.save(request);
-        Optional<User> candidate = userRepository.findById(saved.getCandidateId());
-        Optional<User> recruiter = userRepository.findById(saved.getRecruiterId());
-        String subject = "Interview Scheduled: " + (saved.getScheduledAt()!=null ? saved.getScheduledAt().toString() : "");
-        String body = "Interview for job id " + saved.getJobId() + " scheduled at " + saved.getScheduledAt() + ". Mode: " + saved.getMode() + ". Link/Location: " + saved.getLocation();
-        candidate.ifPresent(c -> { if (c.getEmail()!=null) emailService.sendSimpleEmail(c.getEmail(), subject, "Hello " + c.getFullName() + ",\n\n" + body); });
-        recruiter.ifPresent(r -> { if (r.getEmail()!=null) emailService.sendSimpleEmail(r.getEmail(), subject, "Hello " + r.getFullName() + ",\n\n" + body); });
-        return ResponseEntity.ok(saved);
-    }
+    public ResponseEntity<?> schedule(@RequestBody Interview interview) {
+        User current = SecurityUtils.getCurrentUser();
+        if (current == null) return ResponseEntity.status(401).body("Unauthorized");
 
-    @GetMapping("/my")
-    public ResponseEntity<?> myInterviews() {
-        User me = SecurityUtils.getCurrentUser();
-        if (me == null) return ResponseEntity.status(401).body("Unauthorized");
-        List<Interview> interviews;
-        if ("RECRUITER".equalsIgnoreCase(me.getRole())) interviews = interviewRepository.findByRecruiterId(me.getId());
-        else interviews = interviewRepository.findByCandidateId(me.getId());
-        return ResponseEntity.ok(interviews);
+        interviewRepo.save(interview);
+
+        // Send email notification to candidate
+        userRepo.findById(interview.getCandidateId()).ifPresent(candidate -> {
+            String subject = "Interview Scheduled for " + interview.getJobId();
+            String body = "Hi " + candidate.getFullName() + ",\n\n" +
+                    "Your interview has been scheduled.\n" +
+                    "Date & Time: " + interview.getScheduledAt() + "\n" +
+                    "Mode: " + interview.getMode() + "\n" +
+                    "Location/Link: " + interview.getLocation() + "\n\n" +
+                    "Regards,\nZidio Connect";
+            emailService.sendEmail(candidate.getEmail(), subject, body);
+        });
+
+        // Send confirmation to recruiter too
+        userRepo.findById(interview.getRecruiterId()).ifPresent(recruiter -> {
+            String subject = "Interview Scheduled with " + interview.getCandidateId();
+            String body = "Hi " + recruiter.getFullName() + ",\n\n" +
+                    "You have scheduled an interview.\n" +
+                    "Date & Time: " + interview.getScheduledAt() + "\n" +
+                    "Candidate ID: " + interview.getCandidateId() + "\n" +
+                    "Job ID: " + interview.getJobId() + "\n\n" +
+                    "Zidio Connect System";
+            emailService.sendEmail(recruiter.getEmail(), subject, body);
+        });
+
+        return ResponseEntity.ok("Interview scheduled & emails sent!");
     }
 }
+

@@ -1,40 +1,43 @@
-version: '3.8'
+version: "3.9"
 services:
-  db:
+  mysql:
     image: mysql:8.0
-    restart: unless-stopped
+    container_name: zidio_mysql
+    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: zidio_connect
-    volumes:
-      - db_data:/var/lib/mysql
     ports:
       - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/zidio_connect?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 1234
-      APP_JWTSECRET: SUPER_SECRET_CHANGE_ME
-    depends_on:
-      - db
+    build: ./backend
+    container_name: zidio_backend
+    restart: always
     ports:
       - "8080:8080"
+    depends_on:
+      - mysql
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/zidio_connect?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=1234
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SERVER_PORT=8080
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: unless-stopped
+    build: ./frontend
+    container_name: zidio_frontend
+    restart: always
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
       - backend
+    environment:
+      - REACT_APP_API_URL=http://backend:8080
 
 volumes:
-  db_data:
+  mysql_data:
+

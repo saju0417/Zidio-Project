@@ -1,0 +1,88 @@
+{
+  "info": {
+    "name": "Zidio Connect Auth + Interview API",
+    "_postman_id": "zidio-connect-auth-collection",
+    "description": "JWT Auth & Interview APIs for Zidio Connect (Spring Boot + MySQL)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "User Registration",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"student\",\n  \"email\": \"student@example.com\",\n  \"password\": \"student123\",\n  \"role\": \"STUDENT\",\n  \"fullName\": \"Student Sam\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/auth/register",
+          "host": ["{{base_url}}"],
+          "path": ["api", "auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "User Login (Get JWT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"student@example.com\",\n  \"password\": \"student123\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["api", "auth", "login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Current User (JWT Protected)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/auth/me",
+          "host": ["{{base_url}}"],
+          "path": ["api", "auth", "me"]
+        }
+      }
+    },
+    {
+      "name": "Schedule Interview (JWT Protected)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jobId\": 1,\n  \"candidateId\": 3,\n  \"recruiterId\": 2,\n  \"scheduledAt\": \"2025-11-06T10:30:00\",\n  \"mode\": \"Zoom\",\n  \"location\": \"https://zoom.us/12345\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/interviews/schedule",
+          "host": ["{{base_url}}"],
+          "path": ["api", "interviews", "schedule"]
+        }
+      }
+    }
+  ]
+}

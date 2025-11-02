@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/interviews")
@@ -27,13 +28,13 @@ public class InterviewController {
         this.emailService = emailService;
     }
 
-    //  Fetch all interviews
+    // Get all interviews
     @GetMapping
     public List<Interview> getAll() {
         return interviewRepo.findAll();
     }
 
-    //  Schedule new interview
+    // Schedule new interview
     @PostMapping("/schedule")
     public ResponseEntity<?> schedule(@RequestBody Interview interview) {
         User current = SecurityUtils.getCurrentUser();
@@ -41,66 +42,110 @@ public class InterviewController {
             return ResponseEntity.status(401).body("Unauthorized");
         }
 
-        // Save interview in DB
+        interviewRepo.save(interview);
+        sendEmailsForAction(interview, "scheduled");
+        return ResponseEntity.ok("Interview scheduled & all HTML emails sent!");
+    }
+
+    // Reschedule interview
+    @PutMapping("/reschedule/{id}")
+    public ResponseEntity<?> reschedule(@PathVariable Long id, @RequestBody Interview updated) {
+        Optional<Interview> existing = interviewRepo.findById(id);
+        if (existing.isEmpty()) {
+            return ResponseEntity.status(404).body("Interview not found");
+        }
+
+        Interview interview = existing.get();
+        interview.setScheduledAt(updated.getScheduledAt());
+        interview.setMode(updated.getMode());
+        interview.setLocation(updated.getLocation());
         interviewRepo.save(interview);
 
-        // Send styled HTML email to Candidate
+        sendEmailsForAction(interview, "rescheduled");
+        return ResponseEntity.ok("Interview rescheduled & notifications sent!");
+    }
+
+    // Cancel interview
+    @DeleteMapping("/cancel/{id}")
+    public ResponseEntity<?> cancel(@PathVariable Long id) {
+        Optional<Interview> existing = interviewRepo.findById(id);
+        if (existing.isEmpty()) {
+            return ResponseEntity.status(404).body("Interview not found");
+        }
+
+        Interview interview = existing.get();
+        interviewRepo.delete(interview);
+
+        sendEmailsForAction(interview, "cancelled");
+        return ResponseEntity.ok("Interview cancelled & notifications sent!");
+    }
+
+    // Centralized email sender for all actions
+    private void sendEmailsForAction(Interview interview, String action) {
+        String actionWord = action.substring(0, 1).toUpperCase() + action.substring(1);
+
+        // Candidate Email
         userRepo.findById(interview.getCandidateId()).ifPresent(candidate -> {
             try {
-                String subject = "Your Interview is Scheduled – Zidio Connect";
-                String html = EmailTemplateUtil.interviewScheduledTemplate(candidate, interview);
+                String subject = "Your Interview has been " + actionWord + " – Zidio Connect";
+                String html = switch (action) {
+                    case "rescheduled" -> """
+                        <html><body style='font-family:Arial;background:#f8fafc;padding:20px;'>
+                          <h2 style='color:#0f172a;'>Interview Rescheduled</h2>
+                          <p>Hi <b>%s</b>,</p>
+                          <p>Your interview has been <b>rescheduled</b> with updated details:</p>
+                          <ul>
+                            <li><b>Date & Time:</b> %s</li>
+                            <li><b>Mode:</b> %s</li>
+                            <li><b>Link:</b> <a href='%s'>%s</a></li>
+                          </ul>
+                          <p>We apologize for any inconvenience and look forward to your participation.</p>
+                          <p>– Zidio Connect Team</p>
+                        </body></html>
+                    """.formatted(candidate.getFullName(), interview.getScheduledAt(),
+                            interview.getMode(), interview.getLocation(), interview.getLocation());
+                    case "cancelled" -> """
+                        <html><body style='font-family:Arial;background:#f8fafc;padding:20px;'>
+                          <h2 style='color:#b91c1c;'>Interview Cancelled</h2>
+                          <p>Hi <b>%s</b>,</p>
+                          <p>We regret to inform you that your scheduled interview has been <b>cancelled</b>.</p>
+                          <p>If required, the recruiter may contact you to reschedule at a later date.</p>
+                          <p>– Zidio Connect Team</p>
+                        </body></html>
+                    """.formatted(candidate.getFullName());
+                    default -> EmailTemplateUtil.interviewScheduledTemplate(candidate, interview);
+                };
                 emailService.sendHtmlEmail(candidate.getEmail(), subject, html);
             } catch (Exception e) {
-                System.err.println("❌ Error sending candidate email: " + e.getMessage());
+                System.err.println("❌ Candidate email (" + action + ") failed: " + e.getMessage());
             }
         });
 
-        // Send styled HTML email to Recruiter
+        // Recruiter Email
         userRepo.findById(interview.getRecruiterId()).ifPresent(recruiter -> {
             try {
-                String subject = "Interview Scheduled Confirmation – Zidio Connect";
+                String subject = "Interview " + actionWord + " Confirmation – Zidio Connect";
                 String html = """
-                    <html><body style='font-family:Arial,sans-serif;background:#f8fafc;padding:20px;'>
-                      <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,0.1);padding:30px;'>
-                        <tr>
-                          <td align='center'>
-                            <h2 style='color:#0f172a;'>Zidio Connect</h2>
-                            <h3 style='color:#14b8a6;'>Interview Confirmation</h3>
-                            <hr style='border:none;height:1px;background:#e5e7eb;margin:20px 0;'/>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <p>Hi <b>%s</b>,</p>
-                            <p>You have scheduled a new interview with candidate ID <b>%d</b>.</p>
-                            <table width='100%%' style='margin-top:10px;margin-bottom:10px;border-collapse:collapse;'>
-                              <tr><td style='padding:5px 0;'>📅 <b>Date & Time:</b></td><td>%s</td></tr>
-                              <tr><td style='padding:5px 0;'>💻 <b>Mode:</b></td><td>%s</td></tr>
-                              <tr><td style='padding:5px 0;'>🔗 <b>Link / Location:</b></td><td><a href='%s'>%s</a></td></tr>
-                            </table>
-                            <p>Please ensure all interview details are communicated clearly to the candidate.</p>
-                            <p style='margin-top:20px;'>Best Regards,<br/><b>Zidio Connect Team</b></p>
-                            <hr style='border:none;height:1px;background:#e5e7eb;margin:20px 0;'/>
-                            <small style='color:#94a3b8;'>This is an automated message. Do not reply to this email.</small>
-                          </td>
-                        </tr>
-                      </table>
+                    <html><body style='font-family:Arial;background:#f8fafc;padding:20px;'>
+                      <h2 style='color:#0f172a;'>Interview %s</h2>
+                      <p>Hi <b>%s</b>,</p>
+                      <p>The interview with candidate ID <b>%d</b> has been <b>%s</b>.</p>
+                      <p>Date & Time: %s<br/>
+                         Mode: %s<br/>
+                         Link: <a href='%s'>%s</a></p>
+                      <p>– Zidio Connect System</p>
                     </body></html>
-                """.formatted(
-                        recruiter.getFullName(),
-                        interview.getCandidateId(),
-                        interview.getScheduledAt(),
-                        interview.getMode(),
-                        interview.getLocation(),
-                        interview.getLocation()
-                );
+                """.formatted(actionWord, recruiter.getFullName(),
+                        interview.getCandidateId(), action,
+                        interview.getScheduledAt(), interview.getMode(),
+                        interview.getLocation(), interview.getLocation());
                 emailService.sendHtmlEmail(recruiter.getEmail(), subject, html);
             } catch (Exception e) {
-                System.err.println("❌ Error sending recruiter email: " + e.getMessage());
+                System.err.println("❌ Recruiter email (" + action + ") failed: " + e.getMessage());
             }
         });
 
-        // Send Admin Notification Email
+        // Admin Notification
         userRepo.findAll().stream()
                 .filter(user -> "ADMIN".equalsIgnoreCase(user.getRole()))
                 .findFirst()
@@ -108,19 +153,33 @@ public class InterviewController {
                     try {
                         userRepo.findById(interview.getRecruiterId()).ifPresent(recruiter -> {
                             userRepo.findById(interview.getCandidateId()).ifPresent(candidate -> {
-                                String subject = "Admin Alert: New Interview Scheduled – Zidio Connect";
-                                String html = AdminEmailTemplateUtil.interviewScheduledAdminTemplate(recruiter, candidate, interview);
+                                String subject = "Admin Alert: Interview " + actionWord + " – Zidio Connect";
+                                String html = """
+                                    <html><body style='font-family:Arial;background:#f8fafc;padding:20px;'>
+                                      <h2 style='color:#0f172a;'>Admin Notification</h2>
+                                      <p>A scheduled interview has been <b>%s</b> on the platform.</p>
+                                      <ul>
+                                        <li><b>Recruiter:</b> %s (%s)</li>
+                                        <li><b>Candidate:</b> %s (%s)</li>
+                                        <li><b>Job ID:</b> %d</li>
+                                        <li><b>Status:</b> %s</li>
+                                      </ul>
+                                      <p>– Zidio Connect System</p>
+                                    </body></html>
+                                """.formatted(actionWord,
+                                        recruiter.getFullName(), recruiter.getEmail(),
+                                        candidate.getFullName(), candidate.getEmail(),
+                                        interview.getJobId(), actionWord.toUpperCase());
                                 emailService.sendHtmlEmail(admin.getEmail(), subject, html);
                             });
                         });
                     } catch (Exception e) {
-                        System.err.println("❌ Error sending admin notification: " + e.getMessage());
+                        System.err.println("❌ Admin email (" + action + ") failed: " + e.getMessage());
                     }
                 });
-
-        return ResponseEntity.ok("Interview scheduled & all HTML emails sent!");
     }
 }
+
 
 
 

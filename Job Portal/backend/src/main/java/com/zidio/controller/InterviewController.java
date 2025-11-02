@@ -6,6 +6,7 @@ import com.zidio.repository.InterviewRepository;
 import com.zidio.repository.UserRepository;
 import com.zidio.service.EmailService;
 import com.zidio.util.EmailTemplateUtil;
+import com.zidio.util.AdminEmailTemplateUtil;
 import com.zidio.util.SecurityUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,13 +27,13 @@ public class InterviewController {
         this.emailService = emailService;
     }
 
-    // Get all scheduled interviews
+    //  Fetch all interviews
     @GetMapping
     public List<Interview> getAll() {
         return interviewRepo.findAll();
     }
 
-    // Schedule a new interview
+    //  Schedule new interview
     @PostMapping("/schedule")
     public ResponseEntity<?> schedule(@RequestBody Interview interview) {
         User current = SecurityUtils.getCurrentUser();
@@ -40,10 +41,10 @@ public class InterviewController {
             return ResponseEntity.status(401).body("Unauthorized");
         }
 
-        // Save the interview in DB
+        // Save interview in DB
         interviewRepo.save(interview);
 
-        // ✅ Send styled HTML email to candidate
+        // Send styled HTML email to Candidate
         userRepo.findById(interview.getCandidateId()).ifPresent(candidate -> {
             try {
                 String subject = "Your Interview is Scheduled – Zidio Connect";
@@ -54,7 +55,7 @@ public class InterviewController {
             }
         });
 
-        // ✅ Send styled HTML email to recruiter
+        // Send styled HTML email to Recruiter
         userRepo.findById(interview.getRecruiterId()).ifPresent(recruiter -> {
             try {
                 String subject = "Interview Scheduled Confirmation – Zidio Connect";
@@ -99,8 +100,27 @@ public class InterviewController {
             }
         });
 
-        return ResponseEntity.ok("Interview scheduled & HTML emails sent!");
+        // Send Admin Notification Email
+        userRepo.findAll().stream()
+                .filter(user -> "ADMIN".equalsIgnoreCase(user.getRole()))
+                .findFirst()
+                .ifPresent(admin -> {
+                    try {
+                        userRepo.findById(interview.getRecruiterId()).ifPresent(recruiter -> {
+                            userRepo.findById(interview.getCandidateId()).ifPresent(candidate -> {
+                                String subject = "Admin Alert: New Interview Scheduled – Zidio Connect";
+                                String html = AdminEmailTemplateUtil.interviewScheduledAdminTemplate(recruiter, candidate, interview);
+                                emailService.sendHtmlEmail(admin.getEmail(), subject, html);
+                            });
+                        });
+                    } catch (Exception e) {
+                        System.err.println("❌ Error sending admin notification: " + e.getMessage());
+                    }
+                });
+
+        return ResponseEntity.ok("Interview scheduled & all HTML emails sent!");
     }
 }
+
 
 

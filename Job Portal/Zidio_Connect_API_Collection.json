@@ -1,0 +1,78 @@
+{
+  "info": {
+    "name": "Zidio Connect API",
+    "_postman_id": "zidio-connect-demo-collection",
+    "description": "API Endpoints for Zidio Connect Backend (Spring Boot)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get All Interviews",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/interviews",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "interviews"]
+        }
+      }
+    },
+    {
+      "name": "Schedule Interview",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jobId\": 1,\n  \"candidateId\": 3,\n  \"recruiterId\": 2,\n  \"scheduledAt\": \"2025-11-06T10:30:00\",\n  \"mode\": \"Zoom\",\n  \"location\": \"https://zoom.us/12345\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/interviews/schedule",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "interviews", "schedule"]
+        }
+      }
+    },
+    {
+      "name": "Reschedule Interview",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduledAt\": \"2025-11-07T11:00:00\",\n  \"mode\": \"Google Meet\",\n  \"location\": \"https://meet.google.com/xyz\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/interviews/reschedule/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "interviews", "reschedule", "1"]
+        }
+      }
+    },
+    {
+      "name": "Cancel Interview",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/interviews/cancel/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "interviews", "cancel", "1"]
+        }
+      }
+    }
+  ]
+}
